@@ -1,10 +1,12 @@
 from typing import Union
 from uuid import UUID
 
-from api.models import ShowUser
-from api.models import UserCreate
-from db.dals import PortalRole
+from fastapi import HTTPException
+
+from api.schemas import ShowUser
+from api.schemas import UserCreate
 from db.dals import UserDAL
+from db.models import PortalRole
 from db.models import User
 from hashing import Hasher
 
@@ -61,17 +63,24 @@ async def _get_user_by_id(user_id, session) -> Union[User, None]:
 
 
 def check_user_permissions(target_user: User, current_user: User) -> bool:
+    if PortalRole.ROLE_PORTAL_SUPERADMIN in current_user.roles:
+        raise HTTPException(
+            status_code=406, detail="Superadmin cannot be deleted via API."
+        )
     if target_user.user_id != current_user.user_id:
+        # check admin role
         if not {
             PortalRole.ROLE_PORTAL_ADMIN,
             PortalRole.ROLE_PORTAL_SUPERADMIN,
         }.intersection(current_user.roles):
             return False
+        # check admin deactivate superadmin attempt
         if (
             PortalRole.ROLE_PORTAL_SUPERADMIN in target_user.roles
             and PortalRole.ROLE_PORTAL_ADMIN in current_user.roles
         ):
             return False
+        # check admin deactivate admin attempt
         if (
             PortalRole.ROLE_PORTAL_ADMIN in target_user.roles
             and PortalRole.ROLE_PORTAL_ADMIN in current_user.roles
