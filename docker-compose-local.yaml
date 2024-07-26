@@ -24,6 +24,7 @@ services:
       - "5433:5432"
     networks:
       - custom
+
 networks:
   custom:
     driver: bridge
