@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import timedelta
 from typing import Any
 from typing import Generator
 
@@ -11,9 +12,10 @@ from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
 import settings
+from db.models import PortalRole
 from db.session import get_db
 from main import app
-
+from security import create_access_token
 
 CLEAN_TABLES = [
     "users",
@@ -68,10 +70,6 @@ async def _get_test_db():
 
 @pytest.fixture(scope="function")
 async def client() -> Generator[TestClient, Any, None]:
-    """
-    Create a new FastAPI TestClient that uses the `db_session` fixture to override
-    the `get_db` dependency that is injected into routes.
-    """
 
     app.dependency_overrides[get_db] = _get_test_db
     with TestClient(app) as client:
@@ -101,16 +99,32 @@ async def get_user_from_database(asyncpg_pool):
 @pytest.fixture
 async def create_user_in_database(asyncpg_pool):
     async def create_user_in_database(
-        user_id: str, name: str, surname: str, email: str, is_active: bool
+        user_id: str,
+        name: str,
+        surname: str,
+        email: str,
+        is_active: bool,
+        hashed_password: str,
+        roles: list[PortalRole],
     ):
         async with asyncpg_pool.acquire() as connection:
             return await connection.execute(
-                """INSERT INTO users VALUES ($1, $2, $3, $4, $5)""",
+                """INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6, $7)""",
                 user_id,
                 name,
                 surname,
                 email,
                 is_active,
+                hashed_password,
+                roles,
             )
 
     return create_user_in_database
+
+
+def create_test_auth_headers_for_user(email: str) -> dict[str, str]:
+    access_token = create_access_token(
+        data={"sub": email},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"Authorization": f"Bearer {access_token}"}
